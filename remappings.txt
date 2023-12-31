@@ -7,3 +7,7 @@ eth-gas-reporter/=lib/bend-lending-protocol/node_modules/eth-gas-reporter/
 forge-std/=lib/forge-std/src/
 hardhat/=lib/bend-lending-protocol/node_modules/hardhat/
 openzeppelin-contracts/=lib/openzeppelin-contracts/
+openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
+@uniswap/v3-core/=lib/v3-core/
+v3-core/=lib/v3-core/contracts/
+v3-periphery/=lib/v3-periphery/contracts/
