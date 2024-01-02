@@ -45,13 +45,14 @@ interface ILendingAdapter {
      */
     function getFloorPrice(address _nftAsset) external view returns(uint256);
 
+
     /**
-     * @dev Get the borrow balance of an NFT asset.
+     * @dev Retrieves the collateral value of an NFT asset.
      * @param _nftAsset The address of the NFT asset.
      * @param _tokenId The ID of the NFT token.
-     * @return The borrow balance of the NFT asset.
+     * @return The collateral value of the NFT asset.
      */
-    function getBorrowBalance(address _nftAsset, uint _tokenId) external returns(uint256);
+    function getCollateralValue(address _nftAsset, uint _tokenId) external returns(uint256);
 
     /**
      * @dev Get the debt of an NFT asset.
@@ -62,11 +63,12 @@ interface ILendingAdapter {
     function getDebt(address _nftAsset, uint _tokenId) external returns(uint256);
 
     /**
-     * @dev Get the annual percentage rate (APR) of an NFT asset.
+     * @dev Returns the annual percentage rate (APR) for borrowing a specific asset against an NFT asset.
      * @param _nftAsset The address of the NFT asset.
-     * @return The APR of the NFT asset.
+     * @param _borrowAsset The address of the asset to be borrowed.
+     * @return The borrow APR as a uint256 value.
      */
-    function getAPR(address _nftAsset) external view returns(uint256);
+    function getBorrowAPR(address _nftAsset, address _borrowAsset) external view returns(uint256);
 
     /**
      * @dev Get the loan-to-value (LTV) ratio of an NFT asset.

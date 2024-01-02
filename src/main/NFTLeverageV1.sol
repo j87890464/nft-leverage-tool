@@ -7,19 +7,21 @@ import {NFTLeverageStorageV1} from "./NFTLeverageStorageV1.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {ILendingAdapter} from "../interfaces/ILendingAdapter.sol";
 import {IERC721} from "openzeppelin-contracts/contracts/interfaces/IERC721.sol";
+import {IERC721Receiver} from "openzeppelin-contracts/contracts/interfaces/IERC721Receiver.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {ILendPool} from "../interfaces/benddao/ILendPool.sol";
 import {IFragmentAdapter}  from "../interfaces/IFragmentAdapter.sol";
-import {IERC721Receiver} from "openzeppelin-contracts/contracts/interfaces/IERC721Receiver.sol";
 
-contract NFTLeverageV1 is IERC721Receiver, NFTLeverageStorageV1, UUPSUpgradeable, OwnableUpgradeable {
+contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, NFTLeverageStorageV1, IERC721Receiver {
     function initializeV1(address _lendingAdapter, address _fragmentAdapter) public initializer {
+        __Ownable_init(msg.sender);
         version = VERSION();
         _addLendingAdapter(_lendingAdapter);
         _addFragmentAdapter(_fragmentAdapter);
     }
 
-    function createLeverage(LeverageParams memory leverageParams) public {
+    function createLeverage(LeverageParams memory leverageParams) public onlyProxy nonReentrant {
         address lendingAdapter = lendingAdapters[leverageParams.lendingIndex];
         uint256 floorPrice = ILendingAdapter(lendingAdapter).getFloorPrice(leverageParams.collateralAsset);
         require(floorPrice > 0, Errors.LEND_INVALID_FLOOR_PRICE);
@@ -54,7 +56,7 @@ contract NFTLeverageV1 is IERC721Receiver, NFTLeverageStorageV1, UUPSUpgradeable
         }));
     }
 
-    function removeLeverage(uint256 _positionIndex) public {
+    function removeLeverage(uint256 _positionIndex) public onlyProxy nonReentrant {
         require(_positionIndex < leveragedPositions.length, Errors.LEND_INVALID_POSITION_INDEX);
         LeveragedPosition memory position = leveragedPositions[_positionIndex];
         ILendingAdapter lendingAdapter = ILendingAdapter(lendingAdapters[position.lendingIndex]);
@@ -79,7 +81,7 @@ contract NFTLeverageV1 is IERC721Receiver, NFTLeverageStorageV1, UUPSUpgradeable
         IERC721(position.collateralAsset).transferFrom(address(this), msg.sender, position.collateralId);
     }
 
-    function withdrawTo(address _to, address _asset, uint256 _amount) public onlyOwner {
+    function withdrawTo(address _to, address _asset, uint256 _amount) public onlyOwner nonReentrant {
         require(_to != address(0), Errors.LEND_INVALID_WITHDRAW_ADDRESS);
         require(_asset != address(0), Errors.LEND_INVALID_WITHDRAW_ASSET_ADDRESS);
         require(_amount > 0, Errors.LEND_INVALID_WITHDRAW_AMOUNT);
@@ -156,12 +158,12 @@ contract NFTLeverageV1 is IERC721Receiver, NFTLeverageStorageV1, UUPSUpgradeable
 
     function _removeFragmentAdapter(uint8 _fragmentIndex) internal {
         require(_fragmentIndex < fragmentAdapters.length, Errors.FRAG_INVALID_FRAGMENT_ADAPTER_INDEX);
-        
+
         fragmentAdapters[_fragmentIndex] = fragmentAdapters[fragmentAdapters.length - 1];
         fragmentAdapters.pop();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner onlyProxy {
         require(newImplementation != address(0), Errors.UG_INVALID_IMPLEMENTATION_ADDRESS);
     }
 

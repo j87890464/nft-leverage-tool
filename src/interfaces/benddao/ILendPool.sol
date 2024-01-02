@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import {ILendPoolAddressesProvider} from "./ILendPoolAddressesProvider.sol";
+import {DataTypes} from "./DataTypes.sol";
 
 interface ILendPool {
   /**
@@ -317,6 +318,10 @@ interface ILendPool {
     uint256 balanceToBefore
   ) external view;
 
+  function getReserveConfiguration(address asset) external view returns (DataTypes.ReserveConfigurationMap memory);
+
+  function getNftConfiguration(address asset) external view returns (DataTypes.NftConfigurationMap memory);
+
   /**
    * @dev Returns the normalized income normalized income of the reserve
    * @param asset The address of the underlying asset of the reserve
@@ -331,7 +336,16 @@ interface ILendPool {
    */
   function getReserveNormalizedVariableDebt(address asset) external view returns (uint256);
 
+  /**
+   * @dev Returns the state and configuration of the reserve
+   * @param asset The address of the underlying asset of the reserve
+   * @return The state of the reserve
+   **/
+  function getReserveData(address asset) external view returns (DataTypes.ReserveData memory);
+
   function getReservesList() external view returns (address[] memory);
+
+  function getNftData(address asset) external view returns (DataTypes.NftData memory);
 
   /**
    * @dev Returns the loan data of the NFT
