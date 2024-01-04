@@ -12,18 +12,7 @@ contract NFTLeverageStorageV1 {
     uint256[50] private __upgradeGap; // gap for upgrade safety
 
     // lending
-    address[] public lendingAdapters;
-
-    enum LendingStatus {
-        Disabled,
-        Enabled
-    }
-
-    struct LendingProtocol {
-        string name;
-        uint version;
-        LendingStatus status;
-    }
+    address[] internal lendingAdapters;
 
     struct LeverageParams {
         address collateralAsset;
@@ -34,6 +23,13 @@ contract NFTLeverageStorageV1 {
         bool toFragment;
         uint8 fragmentIndex;
         uint256 maxBorrowRate;
+    }
+
+    struct DeleverageParams {
+        uint256 positionIndex;
+        uint256 deRatio;
+        uint256 maxRepayAmount;
+        bool exchangeFragment;
     }
 
     struct LeveragedPosition {
@@ -47,13 +43,12 @@ contract NFTLeverageStorageV1 {
         uint256 fragmentAmount;
     }
 
-    LendingProtocol[] public lendingProtocols;
-    LeveragedPosition[] public leveragedPositions;
+    LeveragedPosition[] internal leveragedPositions;
 
     uint256[50] private __lendGap;
 
     // fragment
-    address[] public fragmentAdapters;
+    address[] internal fragmentAdapters;
 
     uint256[50] private __fragmentGap;
 }

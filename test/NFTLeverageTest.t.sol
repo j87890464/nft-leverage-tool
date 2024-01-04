@@ -55,7 +55,7 @@ contract NFTLeverageTest is ForkSetUp {
         assertEq(MockNFTLeverageV2(address(proxy)).isV2(), true);
     }
 
-    function testCreateLeverage() public {
+    function testLeverage() public {
         testDeployProxy();
 
         vm.startPrank(maycOwner);
@@ -68,27 +68,40 @@ contract NFTLeverageTest is ForkSetUp {
         vm.startPrank(userA);
         IERC721(MAYC).approve(address(proxy), _tokenId);
         uint _targetLR = 5000; // 50%
-        NFTLeverageV1(address(proxy)).createLeverage(NFTLeverageStorageV1.LeverageParams({
+        uint8 _lendingIndex = 0;
+        bool _toFragment = true;
+        uint8 _fragmentIndex = 0;
+        uint _maxBorrowRate = 0;
+        NFTLeverageV1(address(proxy)).leverage(NFTLeverageStorageV1.LeverageParams({
             collateralAsset: MAYC,
             collateralId: _tokenId,
             targetLR: _targetLR,
-            lendingIndex: 0,
+            lendingIndex: _lendingIndex,
             loanAsset: WETH,
-            toFragment: true,
-            fragmentIndex: 0,
-            maxBorrowRate: 0
+            toFragment: _toFragment,
+            fragmentIndex: _fragmentIndex,
+            maxBorrowRate: _maxBorrowRate
         })
         );
         vm.stopPrank();
     }
 
-    function testRemoveLeverage() public {
-        testCreateLeverage();
+    function testDeleverage() public {
+        testLeverage();
 
         vm.startPrank(userA);
         // uniswap fee and slippage
         IERC20(WETH).approve(address(proxy), 1 ether);
-        NFTLeverageV1(address(proxy)).removeLeverage(0);
+        uint _positionIndex = 0;
+        uint _deRatio = 5000; // 50%
+        uint _maxRepayAmount = 0;
+        bool _exchangeFragment = true;
+        NFTLeverageV1(address(proxy)).deleverage(NFTLeverageStorageV1.DeleverageParams({
+            positionIndex: _positionIndex,
+            deRatio: _deRatio,
+            maxRepayAmount: _maxRepayAmount,
+            exchangeFragment: _exchangeFragment
+        }));
         vm.stopPrank();
     }
 }

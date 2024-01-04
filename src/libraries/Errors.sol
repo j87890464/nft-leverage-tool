@@ -5,11 +5,6 @@ pragma solidity ^0.8.20;
  * @title Errors library
  */
 library Errors {
-  enum ReturnCode {
-    SUCCESS,
-    FAILED
-  }
-
   // upgrade errors
   string public constant UG_INVALID_IMPLEMENTATION_ADDRESS = "001";
   string public constant UG_NEW_IMPLEMENTAION_NOT_PROXIABLE = "002";
@@ -35,6 +30,12 @@ library Errors {
   string public constant LEND_INVALID_WITHDRAW_ASSET_ADDRESS = "409";
   string public constant LEND_INVALID_WITHDRAW_AMOUNT = "410";
   string public constant LEND_INVALID_POSITION_INDEX = "411";
+  string public constant LEND_INVALID_POSITION_ID = "412";
+  string public constant LEND_BORROW_FAILED = "413";
+  string public constant LEND_INVALID_RATIO = "414";
+  string public constant LEND_OVER_MAX_REPAY_AMOUNT = "415";
+  string public constant LEND_REPAY_FAILED = "416";
+  string public constant LEND_INCORRECT_REPAY_AMOUNT = "417";
 
   //fragment errors
   string public constant FRAG_INVALID_FRAGMENT_ADAPTER_ADDRESS = "500";
