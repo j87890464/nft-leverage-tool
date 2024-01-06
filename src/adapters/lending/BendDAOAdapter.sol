@@ -34,20 +34,10 @@ contract BendDAOAdapter is ILendingAdapter, Ownable, ReentrancyGuard {
      * @param _tokenId The ID of the NFT token used as collateral.
      * @param _borrowAsset The address of the asset to be borrowed.
      * @param _borrowAmount The amount of the borrow asset to be borrowed.
-     * @param _maxBorrowRate The maximum borrow rate allowed for the borrower.
      */
-    function borrow(address _nftAsset, uint _tokenId, address _borrowAsset, uint _borrowAmount, uint _maxBorrowRate) external override nonReentrant {
-        address[] memory assets = new address[](1);
-        uint256[] memory amounts = new uint256[](1);
-        address[] memory nftAssets = new address[](1);
-        uint256[] memory nftTokenIds = new uint256[](1);
-        assets[0] = _borrowAsset;
-        uint _nftFloor = NFTOracleGetter().getAssetPrice(_nftAsset);
-        amounts[0] = _borrowAmount;
-        nftAssets[0] = _nftAsset;
-        nftTokenIds[0] = _tokenId;
+    function borrow(address _nftAsset, uint _tokenId, address _borrowAsset, uint _borrowAmount) external override nonReentrant {
         IERC721(_nftAsset).approve(address(LendPool()), _tokenId);
-        LendPool().batchBorrow(assets, amounts, nftAssets, nftTokenIds, address(this), 0);
+        LendPool().borrow(_borrowAsset, _borrowAmount, _nftAsset, _tokenId, address(this), 0);
     }
 
     /**

@@ -4,15 +4,16 @@ pragma solidity ^0.8.0;
 import {IPriceOracleAdapter} from "../../interfaces/IPriceOracleAdapter.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
+import {IERC20Metadata} from "openzeppelin-contracts/contracts/interfaces/IERC20Metadata.sol";
 import "v3-core/libraries/TickMath.sol";
 import "v3-core/libraries/FixedPoint96.sol";
 import "v3-core/libraries/FullMath.sol";
 
 /**
- * @title UniswapV3PriceOracleAdapter
+ * @title UniswapV3Adapter
  * @dev This contract is an adapter for interacting with the Uniswap V3 price oracle.
  */
-contract UniswapV3PriceOracleAdapter is IPriceOracleAdapter {
+contract UniswapV3Adapter is IPriceOracleAdapter {
     address public constant FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     uint24 public constant FEE_03 = 3000; // 0.3%
 
@@ -84,6 +85,9 @@ contract UniswapV3PriceOracleAdapter is IPriceOracleAdapter {
         if (_from == token1) {
             price = _reciprocal(price);
         }
+
+        // Convert the X96 price
+        price = FullMath.mulDiv(price, 10**IERC20Metadata(_to).decimals(), 2**FixedPoint96.RESOLUTION);
         
         return price;
     }
@@ -121,10 +125,13 @@ contract UniswapV3PriceOracleAdapter is IPriceOracleAdapter {
             twap = _getPriceX96FromSqrtPriceX96(_getSqrtTwapX96(address(pool), _period));
         }
         
-        // If the _from address is token1, invert the price
+        // If the _from address is token1, invert the TWAP
         if (_from == token1) {
             twap = _reciprocal(twap);
         }
+
+        // Convert the X96 TWAP
+        twap = FullMath.mulDiv(twap, 10**IERC20Metadata(_from).decimals(), FixedPoint96.Q96);
 
         return twap;
     }
@@ -167,6 +174,6 @@ contract UniswapV3PriceOracleAdapter is IPriceOracleAdapter {
      */
     function _reciprocal(uint256 x) internal pure returns (uint256) {
         require(x > 0);
-        return (FixedPoint96.Q96 * FixedPoint96.Q96) / x;
+        return FullMath.mulDiv(FixedPoint96.Q96, FixedPoint96.Q96, x);
     }
 }

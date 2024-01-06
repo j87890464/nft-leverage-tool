@@ -19,11 +19,12 @@ import {IPriceOracleAdapter} from "../interfaces/IPriceOracleAdapter.sol";
  * @dev This contract implements the functionality for leveraging, deleveraging NFT positions and positions risk management.
  */
 contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, NFTLeverageStorageV1, IERC721Receiver {
-    function initializeV1(address _lendingAdapter, address _fragmentAdapter) external initializer {
+    function initializeV1(address _lendingAdapter, address _fragmentAdapter, address _priceOracleAdapter) external initializer {
         __Ownable_init(msg.sender);
         version = VERSION();
         _addLendingAdapter(_lendingAdapter);
         _addFragmentAdapter(_fragmentAdapter);
+        _addPriceOracleAdapter(_priceOracleAdapter);
     }
 
     function VERSION() public pure returns (string memory) {
@@ -34,9 +35,13 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
      * @dev Leverages the position by borrowing a loan amount based on the given LeverageParams.
      * @param _leverageParams The parameters for leveraging the position.
      */
-    function leverage(LeverageParams memory _leverageParams) external onlyOwner onlyProxy nonReentrant {
-        address lendingAdapter = lendingAdapters[_leverageParams.lendingIndex];
-        uint256 floorPrice = ILendingAdapter(lendingAdapter).getFloorPrice(_leverageParams.collateralAsset);
+    function leverage(LeverageParams memory _leverageParams) external onlyOwner onlyProxy nonReentrant returns(uint256) {
+        require(_leverageParams.lendingIndex < lendingAdapters.length, Errors.LEND_INVALID_LENDING_ADAPTER_INDEX);
+        ILendingAdapter lendingAdapter = ILendingAdapter(lendingAdapters[_leverageParams.lendingIndex]);
+        require(lendingAdapter.isNftSupported(_leverageParams.collateralAsset), Errors.LEND_INVALID_NFT_ASSET_ADDRESS);
+        require(lendingAdapter.isBorrowAssetSupported(_leverageParams.loanAsset), Errors.LEND_INVALID_LOAN_ASSET_ADDRESS);
+        require(_leverageParams.maxBorrowRate == 0 || lendingAdapter.getBorrowAPR(_leverageParams.collateralAsset, _leverageParams.loanAsset) <= _leverageParams.maxBorrowRate, Errors.LEND_OVER_MAX_BORROW_RATE);
+        uint floorPrice = lendingAdapter.getFloorPrice(_leverageParams.collateralAsset);
         require(floorPrice > 0, Errors.LEND_INVALID_FLOOR_PRICE);
         uint loanAmount = floorPrice * _leverageParams.targetLR / LR_BASE;
         uint balanceBefore = IERC20(_leverageParams.loanAsset).balanceOf(address(this));
@@ -45,16 +50,15 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
             loanAmount,
             _leverageParams.collateralAsset,
             _leverageParams.collateralId,
-            _leverageParams.lendingIndex,
-            _leverageParams.maxBorrowRate
+            _leverageParams.lendingIndex
         );
         uint balanceAfter = IERC20(_leverageParams.loanAsset).balanceOf(address(this));
         require(balanceAfter - balanceBefore == loanAmount, Errors.LEND_INVALID_LOAN_AMOUNT);
 
-        uint _fragmentAmount;
-        if (_leverageParams.toFragment) {
+        uint fragmentAmount;
+        if (_leverageParams.toFragment) {         
             IERC20(WETH).transfer(address(fragmentAdapters[_leverageParams.fragmentIndex]), loanAmount);
-            _fragmentAmount = _exchange(_leverageParams.collateralAsset, WETH, loanAmount, _leverageParams.fragmentIndex);
+            fragmentAmount = _exchange(_leverageParams.collateralAsset, WETH, loanAmount, _leverageParams.fragmentIndex);
         }
 
         leveragedPositions.push(LeveragedPosition({
@@ -65,8 +69,10 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
             collateralId: _leverageParams.collateralId,
             fragmentIndex: _leverageParams.fragmentIndex,
             fragmentAsset: IFragmentAdapter(fragmentAdapters[_leverageParams.fragmentIndex]).getFragmentAsset(_leverageParams.collateralAsset),
-            fragmentAmount: _fragmentAmount
+            fragmentAmount: fragmentAmount
         }));
+
+        return leveragedPositions.length - 1;
     }
 
     /**
@@ -78,7 +84,7 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         require(_deleverageParams.deRatio > 0, Errors.LEND_INVALID_RATIO);
         
         // Exchange fragment
-        LeveragedPosition memory position = leveragedPositions[_deleverageParams.positionIndex];
+        LeveragedPosition storage position = leveragedPositions[_deleverageParams.positionIndex];
         if (_deleverageParams.exchangeFragment) {
             if (position.fragmentAmount > 0 && IERC20(position.fragmentAsset).balanceOf(address(this)) >= position.fragmentAmount) {
                 IERC20(position.fragmentAsset).transfer(address(fragmentAdapters[position.fragmentIndex]), position.fragmentAmount);
@@ -93,10 +99,13 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         uint repayAmount;
         uint currentLTV = lendingAdapter.getLTV(position.collateralAsset, position.collateralId);
         uint debtBefore = lendingAdapter.getDebt(position.collateralAsset, position.collateralId);
+        bool fullyRepay;
         if (currentLTV > _deleverageParams.deRatio) {
             repayAmount = debtBefore * _deleverageParams.deRatio / currentLTV;
+            fullyRepay = false;
         } else {
             repayAmount = debtBefore;
+            fullyRepay = true;
         }
         require(_deleverageParams.maxRepayAmount == 0 || repayAmount < _deleverageParams.maxRepayAmount, Errors.LEND_OVER_MAX_REPAY_AMOUNT);
         
@@ -109,18 +118,21 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         (bool success, ) = address(lendingAdapter).delegatecall(abi.encodeWithSignature("repay(address,uint256,uint256)", position.collateralAsset, position.collateralId, repayAmount));
         require(success, Errors.LEND_REPAY_FAILED);
         uint balanceAfter = IERC20(position.loanAsset).balanceOf(address(this));
-        require(balanceBefore + extraRepayAmount - balanceAfter == repayAmount, Errors.LEND_INCORRECT_REPAY_AMOUNT);
-        uint debtAfter = lendingAdapter.getDebt(position.collateralAsset, position.collateralId);
-        position.loanAmount = debtAfter;
+        require((balanceBefore + extraRepayAmount - balanceAfter) == repayAmount, Errors.LEND_INCORRECT_REPAY_AMOUNT);
 
-        // Full repay
-        if (debtAfter == 0) {
+        // Fully repaid
+        if (fullyRepay) {
+            uint _collateralId = position.collateralId;
+            address _collateralAsset = position.collateralAsset;
             // Remove position
-            position = leveragedPositions[leveragedPositions.length - 1];
+            if (_deleverageParams.positionIndex < leveragedPositions.length - 1) {
+                position = leveragedPositions[leveragedPositions.length - 1];
+            }
             leveragedPositions.pop();
-
             // Return collateral
-            IERC721(position.collateralAsset).safeTransferFrom(address(this), msg.sender, position.collateralId);
+            IERC721(_collateralAsset).safeTransferFrom(address(this), msg.sender, _collateralId);
+        } else {
+            position.loanAmount = lendingAdapter.getDebt(position.collateralAsset, position.collateralId);
         }
     }
 
@@ -151,6 +163,18 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         require(_asset != address(0), Errors.LEND_INVALID_WITHDRAW_ASSET_ADDRESS);
 
         IERC721(_asset).safeTransferFrom(address(this), _to, _tokenId);
+    }
+
+    /**
+     * @dev Withdraws a specified amount of ETH to the given address.
+     * @param _to The address to which the ETH will be withdrawn.
+     * @param _amount The amount of ETH to be withdrawn.
+     */
+    function withdrawEthTo(address payable _to, uint256 _amount) external onlyOwner onlyProxy nonReentrant {
+        require(_to != address(0), Errors.LEND_INVALID_WITHDRAW_ADDRESS);
+        require(_amount > 0, Errors.LEND_INVALID_WITHDRAW_AMOUNT);
+
+        _to.transfer(_amount);
     }
 
     /**
@@ -254,13 +278,13 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
     /**
      * @dev Retrieves the price of the specified fragment asset.
      * @param _asset The address of the fragment asset.
-     * @param _fragmentIndex The index of the fragment adapter.
+     * @param _priceOracleIndex The index of the price oracle adapter.
      * @return The price as a uint256 value.
      */
-    function getFragmentPrice(address _asset, uint256 _fragmentIndex) external onlyOwner onlyProxy returns (uint256) {
-        require(_fragmentIndex < fragmentAdapters.length, Errors.FRAG_INVALID_FRAGMENT_ADAPTER_INDEX);
+    function getFragmentPrice(address _asset, uint256 _priceOracleIndex) external onlyOwner onlyProxy returns (uint256) {
+        require(_priceOracleIndex < priceOracleAdapters.length, Errors.ORACLE_INVALID_PRICE_ORACLE_ADAPTER_INDEX);
         require(_asset != address(0), Errors.FRAG_INVALID_NFT_ASSET_ADDRESS);
-        return IPriceOracleAdapter(fragmentAdapters[_fragmentIndex]).getPrice(_asset, WETH);
+        return IPriceOracleAdapter(priceOracleAdapters[_priceOracleIndex]).getPrice(_asset, WETH);
     }
 
     /**
@@ -288,6 +312,14 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
     }
 
     /**
+     * @dev Returns the total number of leveraged positions.
+     * @return The total number of leveraged positions.
+     */
+    function totalLeveragedPositions() external view onlyOwner onlyProxy returns (uint256) {
+        return leveragedPositions.length;
+    }
+
+    /**
      * @dev Function to handle the receipt of an ERC721 token.
      * @param _operator The address which called the `safeTransferFrom` function.
      * @param _from The address which previously owned the token.
@@ -304,8 +336,7 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         uint256 _loanAmount,
         address _collateralAsset,
         uint256 _collateralId,
-        uint8 _lendingIndex,
-        uint256 _maxBorrowRate
+        uint8 _lendingIndex
     ) internal {
         require(_loanAmount > 0, Errors.LEND_INVALID_LOAN_AMOUNT);
         require(_loanAsset != address(0), Errors.LEND_INVALID_LOAN_ASSET_ADDRESS);
@@ -314,7 +345,7 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
 
         ILendingAdapter lendingAdapter = ILendingAdapter(lendingAdapters[_lendingIndex]);
         IERC721(_collateralAsset).transferFrom(msg.sender, address(this), _collateralId);
-        (bool success, ) = address(lendingAdapter).delegatecall(abi.encodeWithSignature("borrow(address,uint256,address,uint256,uint256)", _collateralAsset, _collateralId, _loanAsset, _loanAmount, _maxBorrowRate));
+        (bool success, ) = address(lendingAdapter).delegatecall(abi.encodeWithSignature("borrow(address,uint256,address,uint256)", _collateralAsset, _collateralId, _loanAsset, _loanAmount));
         require(success, Errors.LEND_BORROW_FAILED);
     }
 
@@ -354,6 +385,13 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
 
         IFragmentAdapter adapter = IFragmentAdapter(_fragmentAdapter);
         fragmentAdapters.push(_fragmentAdapter);
+    }
+
+    function _addPriceOracleAdapter(address _priceOracleAdapter) internal {
+        require(_priceOracleAdapter != address(0), Errors.ORACLE_INVALID_PRICE_ORACLE_ADAPTER_ADDRESS);
+
+        IPriceOracleAdapter adapter = IPriceOracleAdapter(_priceOracleAdapter);
+        priceOracleAdapters.push(_priceOracleAdapter);
     }
 
     function _authorizeUpgrade(address newImplementation) internal view override onlyOwner onlyProxy {

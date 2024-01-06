@@ -12,9 +12,8 @@ interface ILendingAdapter {
      * @param _tokenId The address of the specific NFT token used as collateral.
      * @param _borrowAsset The address of the asset to be borrowed.
      * @param _borrowAmount The amount of the borrow asset to be borrowed.
-     * @param _maxBorrowRate The maximum borrow rate allowed for the loan.
      */
-    function borrow(address _nftAsset, uint _tokenId, address _borrowAsset, uint _borrowAmount, uint _maxBorrowRate) external;
+    function borrow(address _nftAsset, uint _tokenId, address _borrowAsset, uint _borrowAmount) external;
 
     /**
      * @dev Repays a specified amount of debt for a given NFT asset and token ID.

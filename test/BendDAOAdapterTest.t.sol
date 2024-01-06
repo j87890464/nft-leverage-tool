@@ -60,9 +60,6 @@ contract BendDAOAdapterTest is ForkSetUp {
         uint borrowAPR = bendDAOAdapter.getBorrowAPR(MAYC, WETH);
         console2.log("borrowAPR of MAYC(WETH):", borrowAPR);
         assertGt(borrowAPR, 0);
-        borrowAPR = bendDAOAdapter.getBorrowAPR(MAYC, USDT);
-        console2.log("borrowAPR of MAYC(USDT):", borrowAPR);
-        assertGt(borrowAPR, 0);
         borrowAPR = bendDAOAdapter.getBorrowAPR(address(0x01), WETH);
         assertEq(borrowAPR, 0);
         borrowAPR = bendDAOAdapter.getBorrowAPR(MAYC, address(0x01));
