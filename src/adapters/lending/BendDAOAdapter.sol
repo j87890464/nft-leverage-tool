@@ -194,11 +194,11 @@ contract BendDAOAdapter is ILendingAdapter, Ownable, ReentrancyGuard {
         return IBNFTRegistry(LendPoolAddressProvider().getBNFTRegistry());
     }
 
-    function withdraw() public onlyOwner {
+    function withdrawEth() public onlyOwner {
         payable(owner()).transfer(address(this).balance);
     }
 
-    function withdrawTo(address _asset) public onlyOwner {
+    function withdraw(address _asset) public onlyOwner {
         IERC20(_asset).transfer(owner(), IERC20(_asset).balanceOf(address(this)));
     }
 }

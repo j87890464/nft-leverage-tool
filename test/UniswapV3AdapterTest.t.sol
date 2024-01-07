@@ -27,6 +27,9 @@ contract UniswapV3AdapterTest is ForkSetUp {
         price = uniswapV3Adapter.getPrice(from, to);
         console2.log("price of %s to %s: %s", from, to, price);
         assertGt(price, 0, "Incorrect price");
+        price = uniswapV3Adapter.getPrice(from, to, 3000);
+        console2.log("price of %s to %s: %s", from, to, price);
+        assertGt(price, 0, "Incorrect price");
     }
 
     function testGetTWAP() public {
@@ -40,6 +43,9 @@ contract UniswapV3AdapterTest is ForkSetUp {
         assertGt(twap, 0, "Incorrect TWAP");
         (from, to) = (to, from);
         twap = uniswapV3Adapter.getTWAP(from, to, period);
+        console2.log("TWAP of %s(period: %s): %s", from, period, twap);
+        assertGt(twap, 0, "Incorrect TWAP");
+        twap = uniswapV3Adapter.getTWAP(from, to, 3000, period);
         console2.log("TWAP of %s(period: %s): %s", from, period, twap);
         assertGt(twap, 0, "Incorrect TWAP");
         period = 0; // current price

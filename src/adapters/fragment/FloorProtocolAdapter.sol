@@ -4,8 +4,10 @@ pragma solidity ^0.8.0;
 import "../../interfaces/IFragmentAdapter.sol";
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import "openzeppelin-contracts/contracts/access/Ownable.sol";
+import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
-contract FloorProtocolAdapter is IFragmentAdapter {
+contract FloorProtocolAdapter is IFragmentAdapter, Ownable, ReentrancyGuard  {
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant UNISWAP_V3_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address public constant BAYC = 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D;
@@ -17,13 +19,13 @@ contract FloorProtocolAdapter is IFragmentAdapter {
 
     struct FragmentInfo {
         address fragmentAsset;
-        address v3Prool;
+        address v3Pool;
         uint24 fee;
     }
 
     mapping(address => FragmentInfo) public fragmentAssets;
 
-    constructor() {
+    constructor() Ownable(msg.sender) {
         _initFragmentAssets();
     }
 
@@ -37,7 +39,7 @@ contract FloorProtocolAdapter is IFragmentAdapter {
         return fragmentAssets[_nftAsset].fragmentAsset;
     }
 
-    function swapToFragment(address _tokenIn, uint256 _amountIn, address _nftAsset) external override returns(uint256) {
+    function swapToFragment(address _tokenIn, uint256 _amountIn, address _nftAsset) external override nonReentrant returns(uint256) {
         require(_tokenIn != address(0), "FloorProtocolAdapter: invalid token in");
         require(_amountIn > 0, "FloorProtocolAdapter: invalid amount in");
         require(_nftAsset != address(0), "FloorProtocolAdapter: invalid nft asset");
@@ -58,7 +60,7 @@ contract FloorProtocolAdapter is IFragmentAdapter {
         return amountOut;
     }
 
-    function swapFromFragment(uint256 _amountIn, address _nftAsset) external returns(uint256) {
+    function swapFromFragment(uint256 _amountIn, address _nftAsset) external nonReentrant returns(uint256) {
         require(_amountIn > 0, "FloorProtocolAdapter: invalid amount in");
         require(_nftAsset != address(0), "FloorProtocolAdapter: invalid nft asset");
         IERC20(fragmentAssets[_nftAsset].fragmentAsset).approve(UNISWAP_V3_ROUTER, _amountIn);
@@ -76,6 +78,25 @@ contract FloorProtocolAdapter is IFragmentAdapter {
         );
 
         return amountOut;
+    }
+
+    /**
+     * @dev Adds a fragment asset to the Floor Protocol adapter.
+     * @param _nftAsset The address of the NFT asset.
+     * @param _fragmentAsset The address of the fragment asset.
+     * @param _v3Pool The address of the V3 pool.
+     * @param _fee The fee for the transaction.
+     */
+    function addFragmentAsset(address _nftAsset, address _fragmentAsset, address _v3Pool, uint24 _fee) external onlyOwner {
+        _setFragmentAsset(_nftAsset, _fragmentAsset, _v3Pool, _fee);
+    }
+
+    function withdrawEth() public onlyOwner {
+        payable(owner()).transfer(address(this).balance);
+    }
+
+    function withdraw(address _asset) public onlyOwner {
+        IERC20(_asset).transfer(owner(), IERC20(_asset).balanceOf(address(this)));
     }
 
     function _initFragmentAssets() internal {

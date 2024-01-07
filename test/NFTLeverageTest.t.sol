@@ -254,6 +254,46 @@ contract NFTLeverageTest is ForkSetUp {
             maxRepayAmount: _maxRepayAmount,
             exchangeFragment: _exchangeFragment
         }));
+        assertEq(IERC721(MAYC).ownerOf(10306), userA, "Not fully deleveraged");
+        vm.stopPrank();
+    }
+
+    function testDeleverageAfterOneDay() public {
+        testLeverage();
+
+        vm.startPrank(userA);
+        NFTLeverageV1 nftLeverageV1 = NFTLeverageV1(address(proxy));
+        vm.roll(block.number + 5760);   // ~1 day
+        skip(86400);
+        console2.log("================================================= After one day");
+        uint positionIndex = 0;
+        console2.log("positionIndex: %s", positionIndex);
+        NFTLeverageV1.LeveragedPosition memory position = nftLeverageV1.getLeveragePosition(positionIndex);
+        console2.log("position.lendingIndex: %s", position.lendingIndex);
+        console2.log("position.collateralAsset: %s", position.collateralAsset);
+        console2.log("position.collateralId: %s", position.collateralId);
+        console2.log("position.loanAsset: %s", position.loanAsset);
+        console2.log("position.loanAmount: %s", position.loanAmount);
+        console2.log("position.fragmentIndex: %s", position.fragmentIndex);
+        console2.log("position.fragmentAsset: %s", position.fragmentAsset);
+        console2.log("position.fragmentAmount: %s", position.fragmentAmount);
+        console2.log("LTV: %s", nftLeverageV1.getLTV(positionIndex));
+        console2.log("collateralValue: %s", nftLeverageV1.getCollateralValue(positionIndex));
+        console2.log("debt: %s", nftLeverageV1.getDebt(positionIndex));
+        console2.log("health factor: %s", nftLeverageV1.getHealthFactor(positionIndex));
+        // uniswap fee and slippage
+        IERC20(WETH).approve(address(nftLeverageV1), 1 ether);
+        uint _positionIndex = 0;
+        uint _deRatio = 5500; // 55%
+        uint _maxRepayAmount = 0;
+        bool _exchangeFragment = true;
+        nftLeverageV1.deleverage(NFTLeverageStorageV1.DeleverageParams({
+            positionIndex: _positionIndex,
+            deRatio: _deRatio,
+            maxRepayAmount: _maxRepayAmount,
+            exchangeFragment: _exchangeFragment
+        }));
+        assertEq(IERC721(position.collateralAsset).ownerOf(position.collateralId), userA, "Not fully deleveraged");
         vm.stopPrank();
     }
 
