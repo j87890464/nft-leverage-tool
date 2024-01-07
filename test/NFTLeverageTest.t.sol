@@ -50,7 +50,7 @@ contract NFTLeverageTest is ForkSetUp {
     function testDeployProxy() public {
         vm.startPrank(userA);
         proxy = new NFTLeverageProxy(address(leverageV1), abi.encodeWithSignature("initializeV1(address,address,address)", address(bendDAOAdapter), address(floorProtocolAdapter), address(uniswapV3Adapter)));
-        console2.log("proxy address: %s", address(proxy));
+        // console2.log("proxy address: %s", address(proxy));
         vm.label(address(proxy), "NFTLeverageProxy");
         vm.stopPrank();
     }
@@ -100,6 +100,7 @@ contract NFTLeverageTest is ForkSetUp {
             maxBorrowRate: _maxBorrowRate
         })
         );
+        console2.log("================================================= After leverage");
         assertEq(nftLeverageV1.totalLeveragedPositions(), 1, "mismatch prositons amount");
         console2.log("positionIndex: %s", positionIndex);
         NFTLeverageV1.LeveragedPosition memory position = nftLeverageV1.getLeveragePosition(positionIndex);
@@ -121,9 +122,10 @@ contract NFTLeverageTest is ForkSetUp {
     }
 
     function testLeverageMultipleAsset() public {
-        testDeployProxy();
         // first
+        console2.log("================================================= 1st leverage");
         testLeverage();
+        console2.log("================================================= 2nd leverage");
         // second
         vm.startPrank(userA);
         NFTLeverageV1 nftLeverageV1 = NFTLeverageV1(address(proxy));
@@ -147,7 +149,22 @@ contract NFTLeverageTest is ForkSetUp {
             maxBorrowRate: _maxBorrowRate
         })
         );
+        console2.log("positionIndex: %s", positionIndex);
+        NFTLeverageV1.LeveragedPosition memory position = nftLeverageV1.getLeveragePosition(positionIndex);
+        console2.log("position.lendingIndex: %s", position.lendingIndex);
+        console2.log("position.collateralAsset: %s", position.collateralAsset);
+        console2.log("position.collateralId: %s", position.collateralId);
+        console2.log("position.loanAsset: %s", position.loanAsset);
+        console2.log("position.loanAmount: %s", position.loanAmount);
+        console2.log("position.fragmentIndex: %s", position.fragmentIndex);
+        console2.log("position.fragmentAsset: %s", position.fragmentAsset);
+        console2.log("position.fragmentAmount: %s", position.fragmentAmount);
+        console2.log("LTV: %s", nftLeverageV1.getLTV(positionIndex));
+        console2.log("collateralValue: %s", nftLeverageV1.getCollateralValue(positionIndex));
+        console2.log("debt: %s", nftLeverageV1.getDebt(positionIndex));
+        console2.log("health factor: %s", nftLeverageV1.getHealthFactor(positionIndex));
         assertEq(nftLeverageV1.totalLeveragedPositions(), 2, "mismatch prositons amount");
+        console2.log("================================================= 3rd leverage");
         _tokenId = 3478;
         _collateralAsset = AZUKI;
         IERC721(_collateralAsset).approve(address(nftLeverageV1), _tokenId);
@@ -167,6 +184,20 @@ contract NFTLeverageTest is ForkSetUp {
             maxBorrowRate: _maxBorrowRate
         })
         );
+        console2.log("positionIndex: %s", positionIndex);
+        position = nftLeverageV1.getLeveragePosition(positionIndex);
+        console2.log("position.lendingIndex: %s", position.lendingIndex);
+        console2.log("position.collateralAsset: %s", position.collateralAsset);
+        console2.log("position.collateralId: %s", position.collateralId);
+        console2.log("position.loanAsset: %s", position.loanAsset);
+        console2.log("position.loanAmount: %s", position.loanAmount);
+        console2.log("position.fragmentIndex: %s", position.fragmentIndex);
+        console2.log("position.fragmentAsset: %s", position.fragmentAsset);
+        console2.log("position.fragmentAmount: %s", position.fragmentAmount);
+        console2.log("LTV: %s", nftLeverageV1.getLTV(positionIndex));
+        console2.log("collateralValue: %s", nftLeverageV1.getCollateralValue(positionIndex));
+        console2.log("debt: %s", nftLeverageV1.getDebt(positionIndex));
+        console2.log("health factor: %s", nftLeverageV1.getHealthFactor(positionIndex));
         assertEq(nftLeverageV1.totalLeveragedPositions(), 3, "mismatch prositons amount");
         vm.stopPrank();
     }
@@ -309,7 +340,7 @@ contract NFTLeverageTest is ForkSetUp {
         uint _deRatio = 1000; // 10%
         uint _maxRepayAmount = 0;
         bool _exchangeFragment = true;
-        console2.log("================================================= first deleverage: %s", _deRatio);
+        console2.log("================================================= 1st deleverage: 10%");
         nftLeverageV1.deleverage(NFTLeverageStorageV1.DeleverageParams({
             positionIndex: _positionIndex,
             deRatio: _deRatio,
@@ -318,7 +349,6 @@ contract NFTLeverageTest is ForkSetUp {
         }));
         assertEq(nftLeverageV1.totalLeveragedPositions(), totalPrositionsBefore, "mismatch prositons amount");
 
-        console2.log("After deleverage %s", _deRatio);
         console2.log("positionIndex: %s", _positionIndex);
         NFTLeverageV1.LeveragedPosition memory position = nftLeverageV1.getLeveragePosition(_positionIndex);
         console2.log("position.lendingIndex: %s", position.lendingIndex);
@@ -336,7 +366,7 @@ contract NFTLeverageTest is ForkSetUp {
         
         _deRatio = 4000; // 40%
         _exchangeFragment = false;
-        console2.log("================================================= second deleverage: %s", _deRatio);
+        console2.log("================================================= 2nd deleverage: 40%");
         nftLeverageV1.deleverage(NFTLeverageStorageV1.DeleverageParams({
             positionIndex: _positionIndex,
             deRatio: _deRatio,
