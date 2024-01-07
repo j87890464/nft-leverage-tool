@@ -11,11 +11,11 @@ library Errors {
   string public constant UG_NEW_IMPLEMENTAION_MISMATCH_VERSION = "003";
 
   // common errors
-  string public constant CALLER_NOT_POOL_ADMIN = "100";
-  string public constant CALLER_NOT_ADDRESS_PROVIDER = "101";
-  string public constant INVALID_FROM_BALANCE_AFTER_TRANSFER = "102";
-  string public constant INVALID_TO_BALANCE_AFTER_TRANSFER = "103";
-  string public constant CALLER_NOT_ONBEHALFOF_OR_IN_WHITELIST = "104";
+  string public constant CALLER_NOT_ADMIN = "100";
+  string public constant INVALID_FROM_BALANCE_AFTER_TRANSFER = "101";
+  string public constant INVALID_TO_BALANCE_AFTER_TRANSFER = "102";
+  string public constant ERC20_TRANSFER_FAILED = "103";
+  string public constant ERC721_TRANSFER_FAILED = "104";
 
   // lending errors
   string public constant LEND_INVALID_LENDING_ADAPTER_ADDRESS = "400";

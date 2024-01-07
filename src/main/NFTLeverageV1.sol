@@ -55,9 +55,9 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         uint balanceAfter = IERC20(_leverageParams.loanAsset).balanceOf(address(this));
         require(balanceAfter - balanceBefore == loanAmount, Errors.LEND_INVALID_LOAN_AMOUNT);
 
-        uint fragmentAmount;
+        uint fragmentAmount = 0;
         if (_leverageParams.toFragment) {         
-            IERC20(WETH).transfer(address(fragmentAdapters[_leverageParams.fragmentIndex]), loanAmount);
+            require(IERC20(WETH).transfer(address(fragmentAdapters[_leverageParams.fragmentIndex]), loanAmount), Errors.ERC20_TRANSFER_FAILED);
             fragmentAmount = _exchange(_leverageParams.collateralAsset, WETH, loanAmount, _leverageParams.fragmentIndex);
         }
 
@@ -85,20 +85,21 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         
         // Exchange fragment
         LeveragedPosition storage position = leveragedPositions[_deleverageParams.positionIndex];
+        LeveragedPosition memory positionCache = position;
         if (_deleverageParams.exchangeFragment) {
-            if (position.fragmentAmount > 0 && IERC20(position.fragmentAsset).balanceOf(address(this)) >= position.fragmentAmount) {
-                IERC20(position.fragmentAsset).transfer(address(fragmentAdapters[position.fragmentIndex]), position.fragmentAmount);
-                _exchange(position.collateralAsset, position.collateralAsset, position.fragmentAmount, position.fragmentIndex);
+            if (positionCache.fragmentAmount > 0 && IERC20(positionCache.fragmentAsset).balanceOf(address(this)) >= positionCache.fragmentAmount) {
+                require(IERC20(positionCache.fragmentAsset).transfer(address(fragmentAdapters[positionCache.fragmentIndex]), positionCache.fragmentAmount), Errors.ERC20_TRANSFER_FAILED);
+                _exchange(positionCache.collateralAsset, positionCache.collateralAsset, positionCache.fragmentAmount, positionCache.fragmentIndex);
                 position.fragmentAmount = 0;
             }
         }
-        ILendingAdapter lendingAdapter = ILendingAdapter(lendingAdapters[position.lendingIndex]);
-        uint balanceBefore = IERC20(position.loanAsset).balanceOf(address(this)); //TODO: remove
+        ILendingAdapter lendingAdapter = ILendingAdapter(lendingAdapters[positionCache.lendingIndex]);
+        uint balanceBefore = IERC20(positionCache.loanAsset).balanceOf(address(this));
 
         // Calculate repay amount
         uint repayAmount;
-        uint currentLTV = lendingAdapter.getLTV(position.collateralAsset, position.collateralId);
-        uint debtBefore = lendingAdapter.getDebt(position.collateralAsset, position.collateralId);
+        uint currentLTV = lendingAdapter.getLTV(positionCache.collateralAsset, positionCache.collateralId);
+        uint debtBefore = lendingAdapter.getDebt(positionCache.collateralAsset, positionCache.collateralId);
         bool fullyRepay;
         if (currentLTV > _deleverageParams.deRatio) {
             repayAmount = debtBefore * _deleverageParams.deRatio / currentLTV;
@@ -106,33 +107,33 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         } else {
             repayAmount = debtBefore;
             fullyRepay = true;
-        }
-        require(_deleverageParams.maxRepayAmount == 0 || repayAmount < _deleverageParams.maxRepayAmount, Errors.LEND_OVER_MAX_REPAY_AMOUNT);
-        
-        // Repay
-        uint extraRepayAmount;
-        if (balanceBefore < repayAmount) {
-            extraRepayAmount = repayAmount - balanceBefore;
-            IERC20(position.loanAsset).transferFrom(msg.sender, address(this), extraRepayAmount);
-        }
-        (bool success, ) = address(lendingAdapter).delegatecall(abi.encodeWithSignature("repay(address,uint256,uint256)", position.collateralAsset, position.collateralId, repayAmount));
-        require(success, Errors.LEND_REPAY_FAILED);
-        uint balanceAfter = IERC20(position.loanAsset).balanceOf(address(this));
-        require((balanceBefore + extraRepayAmount - balanceAfter) == repayAmount, Errors.LEND_INCORRECT_REPAY_AMOUNT);
-
-        // Fully repaid
-        if (fullyRepay) {
-            uint _collateralId = position.collateralId;
-            address _collateralAsset = position.collateralAsset;
             // Remove position
             if (_deleverageParams.positionIndex < leveragedPositions.length - 1) {
                 position = leveragedPositions[leveragedPositions.length - 1];
             }
             leveragedPositions.pop();
+        }
+        require(_deleverageParams.maxRepayAmount == 0 || repayAmount < _deleverageParams.maxRepayAmount, Errors.LEND_OVER_MAX_REPAY_AMOUNT);
+        
+        // Repay
+        uint extraRepayAmount = 0;
+        if (balanceBefore < repayAmount) {
+            extraRepayAmount = repayAmount - balanceBefore;
+            require(IERC20(positionCache.loanAsset).transferFrom(msg.sender, address(this), extraRepayAmount), Errors.ERC20_TRANSFER_FAILED);
+        }
+        (bool success, ) = address(lendingAdapter).delegatecall(abi.encodeWithSignature("repay(address,uint256,uint256)", positionCache.collateralAsset, positionCache.collateralId, repayAmount));
+        require(success, Errors.LEND_REPAY_FAILED);
+        uint balanceAfter = IERC20(positionCache.loanAsset).balanceOf(address(this));
+        require((balanceBefore + extraRepayAmount - balanceAfter) == repayAmount, Errors.LEND_INCORRECT_REPAY_AMOUNT);
+
+        // Fully repaid
+        if (fullyRepay) {
+            uint _collateralId = positionCache.collateralId;
+            address _collateralAsset = positionCache.collateralAsset;
             // Return collateral
             IERC721(_collateralAsset).safeTransferFrom(address(this), msg.sender, _collateralId);
         } else {
-            position.loanAmount = lendingAdapter.getDebt(position.collateralAsset, position.collateralId);
+            position.loanAmount = lendingAdapter.getDebt(positionCache.collateralAsset, positionCache.collateralId);
         }
     }
 
@@ -148,7 +149,7 @@ contract NFTLeverageV1 is UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuard, 
         require(_asset != address(0), Errors.LEND_INVALID_WITHDRAW_ASSET_ADDRESS);
         require(_amount > 0, Errors.LEND_INVALID_WITHDRAW_AMOUNT);
 
-        IERC20(_asset).transfer(_to, _amount);
+        require(IERC20(_asset).transfer(_to, _amount), Errors.ERC20_TRANSFER_FAILED);
     }
 
     /**

@@ -199,6 +199,6 @@ contract BendDAOAdapter is ILendingAdapter, Ownable, ReentrancyGuard {
     }
 
     function withdraw(address _asset) public onlyOwner {
-        IERC20(_asset).transfer(owner(), IERC20(_asset).balanceOf(address(this)));
+        require(IERC20(_asset).transfer(owner(), IERC20(_asset).balanceOf(address(this))), "BendDAOAdapter: withdraw failed");
     }
 }
